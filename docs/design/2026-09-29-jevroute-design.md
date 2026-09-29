@@ -1,0 +1,271 @@
+# jevroute - design
+
+Date: 2026-09-29. Status: final draft. Product requirements:
+[docs/prd/2026-09-29-jevroute-prd.md](../prd/2026-09-29-jevroute-prd.md). Evidence from before this repo:
+`~/Work/investigations/typesafe/experiments/skill-suggestion/` (`2026-09-29-results.md`, `2026-09-29-probe.md`,
+`probe.py`, `frozen-v1.json`).
+
+This document holds the detail behind the PRD requirements. Requirement IDs (F1, N1, G1) refer to the PRD.
+
+## Pipeline
+
+```
+prompt typed in a session under ~/Code/**
+  -> UserPromptSubmit hook: jevroute hook  (stdin: hook JSON)
+       0. watchdog  start the 700 ms deadline thread
+       1. input     read stdin (cap 1 MB), parse                            else error:input
+       2. scope     resolved cwd allowlisted? no .jevroute-off? JEVROUTE != off?   else skip:scope
+       3. prompt    slash command or empty -> skip:prompt; short reply -> skip:short_reply
+       4. config    load and validate                                       else error:config
+       5. roster    this session's listing, else the project's stored listing   else skip:roster
+       6. key       Keychain read, dialog disabled                          else error:key
+       7. scrub     mask the prompt and every skill name and description
+       8. policy    drop excluded skills, build one `choice` request with a `none` option
+       9. jev       POST /v1/systemone within the remaining deadline        else error:http / timeout
+      10. decide    sum group members into their canonical skill; top != none and >= 0.9 -> hint
+      11. output    hint as additionalContext; one line to the outcome log (best effort)
+  deadline passed at any step -> watchdog exits 0 with no output
+```
+
+Scope and prompt checks come before config and roster work so that skip paths stay under 20 ms (G4c).
+
+## Modules
+
+One binary crate, one module per unit. Each unit is tested on its own.
+
+| Module | Does | Requirements |
+|---|---|---|
+| `hookio` | Reads the hook JSON from stdin with a size cap; writes the output JSON in one write | F1, N3 |
+| `watchdog` | Starts the deadline thread; exits the process with code 0 and no output at the deadline; guards the single output write | N1 |
+| `scope` | Resolves the cwd, matches allowlist globs, looks for `.jevroute-off` up to `/`, reads `JEVROUTE` | F2, F2a |
+| `prompt` | Slash-command, empty and short-reply checks | F3, F3a |
+| `scrub` | Masks secrets and identifiers in any string | F4, F4a |
+| `roster` | Parses `skill_listing` entries from a transcript from an offset; merges; keeps the session and project caches | F5, F5a, F5b, F5c |
+| `policy` | Loads and validates config; builds the request; decides | F6, F7, F8, N4 |
+| `jev` | Blocking HTTP client (rustls) with a deadline and a response size cap | F6, N1, N3 |
+| `secret` | Keychain read with the dialog disabled; the `key` command's write and access grant | F10 |
+| `outlog` | Appends one JSON line per call; failures are ignored | F9 |
+| `eval` | Runs a labelled set through the same code path; scores; replays recorded responses | F11 |
+| `doctor` | Runs the checks and prints the roster the next prompt would use | F12 |
+
+Crates are chosen at M1. Candidates: `serde_json`, `ureq` (blocking, rustls), `security-framework`,
+`regex`, `globset`, `sha2`.
+
+## Hook contract
+
+From the hooks reference (code.claude.com/docs/en/hooks):
+
+- Stdin carries `session_id`, `transcript_path`, `cwd`, `permission_mode`, `hook_event_name` and `prompt`.
+  Slash commands arrive with their literal `/...` text in `prompt`.
+- Output on a hint:
+  `{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<hint>"}}`.
+  Context is capped at 10,000 characters and is not shown as a chat message.
+- All `UserPromptSubmit` hooks must finish before the prompt reaches Claude, so jevroute's latency is added
+  to every prompt. The default timeout is 30 s; the settings entry sets `"timeout": 2`.
+
+Settings entry installed at M3:
+
+```json
+{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "~/.local/bin/jevroute hook", "timeout": 2}]}]}}
+```
+
+## Short replies
+
+The exact-match list, compared after lowercasing, collapsing whitespace and stripping trailing `.`, `!`
+and `?`: digits `1` to `9`, `yes`, `y`, `no`, `n`, `ok`, `okay`, `thanks`, `thank you`, `go`, `continue`,
+`sure`. The list is a constant in `prompt` and is covered by a table test. `eval` goes through the same check,
+so a labelled skill prompt that matches the list scores as missed.
+
+## Roster
+
+Claude Code writes each `skill_listing` it sends into the session transcript. The entry is internal and not
+documented. Observed shape on 2026-09-29:
+
+```json
+{"type": "attachment", "timestamp": "...", "attachment": {"type": "skill_listing", "isInitial": true,
+ "skillCount": 160, "names": ["agents-sdk", "..."], "content": "- agents-sdk: Build AI agents ...\n- ..."}}
+```
+
+- The first entry of a session has `isInitial: true` and the full listing (132 to 160 skills observed).
+- Later entries have `isInitial: false` and hold only the skills that were added or changed (1 to 8 observed).
+  A name can appear in several of them.
+- The first entry is written in the same batch as the first user message, which appears to be after
+  `UserPromptSubmit` hooks run. M0a confirms this on the installed version.
+- The listing already reflects precedence, `skillOverrides` (`name-only` entries have no description),
+  plugins, bundled and nested skills. jevroute never resolves skills from disk.
+
+Merge rule: an `isInitial: true` entry replaces the roster; any other entry adds or updates skills by name.
+Descriptions come from `content` lines of the form `- <name>: <description>`; a line without `: ` is a
+name-only entry.
+
+### Caches
+
+| Cache | Path | Holds |
+|---|---|---|
+| Session | `~/.cache/jevroute/sessions/<session_id>.json` | transcript path, device and inode, byte offset, merged roster, timestamp of the newest listing entry |
+| Project | `~/.cache/jevroute/projects/<sha256(project key)>.json` | merged roster, source session id, timestamp of the newest listing entry, write time |
+
+- Each call reads only transcript bytes after the offset, up to 8 MB, and never consumes a partial last line.
+- If the transcript's inode changed or its size is below the offset, the session cache is dropped and the
+  transcript is read from the start.
+- Project key: the git common directory when the cwd is inside a repo (read from `.git` without running
+  `git`, so worktrees share it), else the resolved cwd.
+- A project entry is used only when this session has no listing yet and the entry's listing timestamp is less
+  than 7 days old.
+- A writer replaces the project entry only if its listing timestamp is newer than the stored one. Every write
+  goes to a temp file in the same directory and is renamed into place.
+- A transcript that contains `skill_listing` entries but yields zero skills gives `error:roster`.
+
+## Scrub
+
+Patterns: private key blocks, known key prefixes (`sk-`, `ghp_`, `xox`, `AKIA` and others), JWTs,
+`password`/`token`/`secret` followed by `:` or `=` and a value of any length, IBANs with or without spaces,
+emails, NL phone numbers, 9-digit numbers, hex runs of 32+ characters, base64 runs of 40+ characters, and
+`/Users/<name>` paths. The same function runs on the prompt and on every skill name and description.
+
+The table test includes the probe's known failures (`password: abc123!`, a spaced IBAN) as cases that must
+now be masked, and an address sentence and a medical sentence that pass through unchanged, marked as known
+limits.
+
+## Policy and request
+
+The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one option per eligible skill
+(name and description), and a final `none` option with the fixed wording. The model comes from the config.
+
+- `exclude` accepts exact names and `*` globs and runs before the request.
+- Group members stay separate options. After the answer, each member's probability is added to its
+  canonical skill, and members are dropped from the ranking.
+- A group whose canonical skill is not in the roster is ignored for that prompt; its members rank alone.
+- Hint only if the top entry is a skill with a summed probability >= `threshold`. The hint names the
+  canonical skill.
+
+## Deadline
+
+- The watchdog thread starts first and sleeps until `start + deadline_ms` on a monotonic clock. It then exits
+  the process with code 0.
+- The main thread writes its output in one `write` call, and only after it has set a flag that the watchdog
+  checks. So the output is either complete or absent.
+- The HTTP client gets the remaining budget as its total timeout.
+- Keychain access uses the no-dialog flag, so it cannot block on a prompt. A slow Keychain read is still
+  bounded by the watchdog.
+- The outcome log is written before the output only if time allows; logging never delays or cancels a hint.
+
+## Outcome classes
+
+| Case | Behaviour | Outcome |
+|---|---|---|
+| Malformed or oversized stdin | no output | `error:input` |
+| Not allowlisted or opted out | no output | `skip:scope` |
+| Slash command or empty prompt | no output | `skip:prompt` |
+| Short reply | no output | `skip:short_reply` |
+| Invalid config | no output | `error:config` |
+| No usable listing (session or project) | no output | `skip:roster` |
+| Listing entries present but none parsed, or transcript read over the cap | no output | `error:roster` |
+| Keychain locked, key missing, or access not granted | no output | `error:key` |
+| Network error, non-2xx, or response over the cap | no output | `error:http` |
+| Deadline reached | no output | `timeout` |
+| Malformed answer | no output | `error:answer` |
+| Top is `none` | no output | `none` |
+| Top below the threshold | no output | `below-cut` |
+| Hint | hint | `hint` |
+
+## Outcome log
+
+`~/.cache/jevroute/outcomes.jsonl`, rotated at 10 MB (one old file kept). One line per call:
+
+```json
+{"ts": "...", "outcome": "hint", "ms": {"total": 312, "roster": 3, "key": 4, "http": 298},
+ "top": [["diagnose", 0.96], ["none", 0.03], ["code-review", 0.01]], "pick": "diagnose",
+ "roster_source": "session", "roster_id": "<sha256 of sorted names, 12 chars>",
+ "model": "jev-1.13.0", "config": "<sha256 of config, 12 chars>"}
+```
+
+No prompt text and no hash of it.
+
+## Keychain
+
+- `jevroute key` reads the key from 1Password with `op read`, stores it as a generic password item, and adds
+  the current binary to the item's access list.
+- The hook reads the item with the dialog disabled. A rebuilt binary has a new code signature and is not on
+  the list, so the read fails with `error:key` until `jevroute key` runs again. `doctor` reports this.
+- M1 measures the read latency. If it is over 50 ms, that is recorded as a finding for M2.
+
+## Evaluation
+
+### Prompt set format
+
+```json
+{"id": "p01", "kind": "clear", "prompt": "...", "expected": ["diagnose"], "setup": ["..."]}
+```
+
+- `expected` is written by the labeller and is never widened by the config's groups.
+- `setup` is optional: earlier user turns for a two-turn case.
+- Each set file ends with an approved substitution list, `{"approved": [["mattpocock-skills:diagnosing-bugs",
+  "diagnose"], ...]}`. A pick counts as right if it is in `expected`, or if it is a canonical skill whose
+  substitution for an expected skill is on the list.
+- M0a maps expected names that do not exist in `~/Code` to the names that do, and Max approves each
+  substitution. The `grilling` to `brainstorming` substitution starts unapproved.
+
+### Parity (G2a)
+
+The probe's saved runs keep only the top 8 of each answer. M1 records full Jev responses once with
+`jev-1.13.0` for the 105 prompts against the probe listing, and runs the probe's decision code on the same
+responses. `jevroute eval --responses` must then give the same per-prompt decision for every prompt. The
+built requests are compared field by field with the probe's.
+
+### Live and fresh sets (G2b, G3)
+
+- G2b: live `jevroute eval` on the 105 prompts against the probe listing fixture.
+- G3: 60 prompts written by a separate agent from the listing of a `~/Code` session. At least two repos, short
+  follow-ups, lookalikes, and prompts that separate the members of each group. Labels and class balance are
+  committed before the first run.
+
+## M0 procedure
+
+### M0a - groundwork
+
+1. A logging hook in a scratch `~/Code` project writes, on each call, whether `transcript_path` exists and
+   whether it holds a `skill_listing` entry. Run one interactive session with two prompts and one `claude -p`
+   run. Record the Claude Code version.
+2. Copy `prompts.jsonl`, `heldout.jsonl`, `frozen-v1.json` and the probe listing into `eval/` after a secret
+   scan. Extract the listing from the probe transcript into a fixture, since Claude Code deletes old
+   transcripts.
+3. Map expected names to `~/Code` names, write the approved substitution list, and get Max's approval.
+4. Write the 10 two-turn cases and the task rubrics for the 10 completion prompts.
+
+### M0b - behaviour test
+
+- Scratch repo `~/Code/jevroute-eval` with a small module and fixture files, so that prompts about code have
+  something to act on.
+- Three arms, each a project-level hook in its own settings file:
+  - A: no hook.
+  - B: a fixed reminder: "Before you start, check whether one of the listed skills fits this request, and load
+    it with the Skill tool if it does."
+  - C: a throwaway Python hook that implements the PRD pipeline with `jev-1.13.0`, including the short-reply
+    skip and the project listing fallback. One warm-up session seeds the project listing.
+- Run: `claude -p --output-format stream-json --max-turns 3`, tools limited to `Skill`, `Read`, `Glob`,
+  `Grep`. Two-turn cases use `--resume` for the second prompt, so the second prompt runs with its session's
+  own listing.
+- 115 cases x 3 arms x 3 runs = 1,035 runs. A case counts for the result it gives in at least 2 of its 3 runs.
+- From the stream: every `Skill` tool call, its result, and the time to the first assistant output.
+- Completion: 10 skill prompts run to the end in a throwaway worktree with write tools on, arms A and C. A
+  blind Claude judge scores each pair against the prompt's rubric: better, same or worse.
+
+## Testing
+
+- Unit: `scrub` table; `roster` (full listing, delta, repeated name, name-only entry, partial last line,
+  offset resume, replaced transcript, zero-parse `error:roster`); `policy` (config validation, glob exclusion,
+  exclusion before groups, group sum, missing canonical, threshold edges); `scope` (allowlist, symlinks,
+  parent `.jevroute-off`, env); `prompt` (slash, empty, short-reply table); `hookio` round trip.
+- Replay: G2a and G2b as above.
+- Failure tests, each giving exit 0, no output and the right outcome class: cold cache, locked Keychain,
+  binary not granted, network down (unroutable endpoint), 8 parallel calls on one session and one project,
+  oversized stdin, deadline of 50 ms.
+- Latency: an external harness launches the binary and times it to process exit, on the fresh set and on
+  each failure case (G4a-c).
+
+## Known limits
+
+- A skill removed mid-session stays in the roster until a new `isInitial: true` entry arrives.
+- The project listing can lag behind a skill added in another session.
+- Free text (addresses, case or medical details) is not scrubbed; the allowlist is the control.
