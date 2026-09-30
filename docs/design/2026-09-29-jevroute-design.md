@@ -129,8 +129,19 @@ name-only entry.
 
 Patterns: private key blocks, known key prefixes (`sk-`, `ghp_`, `xox`, `AKIA` and others), JWTs,
 `password`/`token`/`secret` followed by `:` or `=` and a value of any length, IBANs with or without spaces,
-emails, NL phone numbers, 9-digit numbers, hex runs of 32+ characters, base64 runs of 40+ characters, and
-`/Users/<name>` paths. The same function runs on the prompt and on every skill name and description.
+emails, NL phone numbers, 9-digit numbers, hex runs of 32+ characters, base64 runs of 40+ characters that
+contain at least two digits, and `/Users/<name>` paths. The same function runs on the prompt and on every
+skill name and description.
+
+Two rules are tighter than the probe's `scrub()`:
+
+- The keyword rule requires the `:` or `=`. The probe made it optional, so "token counting" in the
+  `audit-prompt-caching` and `claude-api` descriptions was redacted.
+- The blob rule requires two digits. The probe's rule matched slash-joined word lists in `claude-api`
+  (`OpenAI/GPT/Gemini/Llama/Mistral/Cohere/Ollama`).
+
+With both changes, scrubbing the probe listing fixture changes nothing, so F4a keeps the request equal to the
+probe's. A test pins this: the scrub of the probe listing must be a no-op.
 
 The table test includes the probe's known failures (`password: abc123!`, a spaced IBAN) as cases that must
 now be masked, and an address sentence and a medical sentence that pass through unchanged, marked as known
@@ -171,6 +182,10 @@ The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one
 - Keychain access uses the no-dialog flag, so it cannot block on a prompt. A slow Keychain read is still
   bounded by the watchdog.
 - The outcome log is written before the output only if time allows; logging never delays or cancels a hint.
+- A watchdog exit bypasses the main thread's logger, so the watchdog writes its own `timeout` line before it
+  exits: one `write(2)` on a log file opened with `O_APPEND` at startup, under 512 bytes. Otherwise the
+  timeout rate (G4d) would miss the failures it measures. The M2 external harness checks that every
+  launched call has exactly one log line.
 
 ## Outcome classes
 
