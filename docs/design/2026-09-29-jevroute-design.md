@@ -14,20 +14,24 @@ prompt typed in a session under ~/Code/**
   -> UserPromptSubmit hook: jevroute hook  (stdin: hook JSON)
        0. watchdog  start the 700 ms deadline thread
        1. input     read stdin (cap 1 MB), parse                            else error:input
-       2. scope     resolved cwd allowlisted? no .jevroute-off? JEVROUTE != off?   else skip:scope
-       3. prompt    slash command or empty -> skip:prompt; short reply -> skip:short_reply
-       4. config    load and validate                                       else error:config
-       5. roster    this session's listing, else the project's stored listing   else skip:roster
-       6. key       Keychain read, dialog disabled                          else error:key
-       7. scrub     mask the prompt and every skill name and description
-       8. policy    drop excluded skills, build one `choice` request with a `none` option
-       9. jev       POST /v1/systemone within the remaining deadline        else error:http / timeout
-      10. decide    sum group members into their canonical skill; top != none and >= 0.9 -> hint
-      11. output    hint as additionalContext; one line to the outcome log (best effort)
+       2. env       JEVROUTE=off?                                           then skip:scope
+       3. config    load and validate (holds the allowlist)                 else error:config
+       4. scope     resolved cwd allowlisted? no .jevroute-off?             else skip:scope
+       5. prompt    slash command or empty -> skip:prompt; short reply -> skip:short_reply
+       6. roster    this session's listing, else the project's stored listing   else skip:roster
+       7. key       Keychain read, dialog disabled                          else error:key
+       8. scrub     mask the prompt and every skill name and description
+       9. policy    drop excluded skills, build one `choice` request with a `none` option
+      10. jev       POST /v1/systemone within the remaining deadline        else error:http / timeout
+      11. decide    sum group members into their canonical skill; top != none and >= 0.9 -> hint
+      12. output    hint as additionalContext; one line to the outcome log (best effort)
   deadline passed at any step -> watchdog exits 0 with no output
 ```
 
-Scope and prompt checks come before config and roster work so that skip paths stay under 20 ms (G4c).
+The allowlist lives in the config, so the config loads before the scope check. Only the `JEVROUTE=off` check
+runs earlier, because it needs nothing else. An invalid config therefore gives `error:config` in every folder,
+since the hook cannot tell which folders are allowed. Config, scope and prompt checks all run before any
+transcript or Keychain work, so skip paths stay under 20 ms (G4c).
 
 ## Modules
 
@@ -112,8 +116,13 @@ name-only entry.
   `git`, so worktrees share it), else the resolved cwd.
 - A project entry is used only when this session has no listing yet and the entry's listing timestamp is less
   than 7 days old.
-- A writer replaces the project entry only if its listing timestamp is newer than the stored one. Every write
-  goes to a temp file in the same directory and is renamed into place.
+- A writer replaces the project entry only if its listing timestamp is newer than the stored one. Atomic
+  rename alone cannot enforce this: two writers can both read the old entry, and the older one can rename
+  last. So the read, compare and replace run under an exclusive `flock` on `<entry>.lock`, taken with a
+  non-blocking try and retried for at most 20 ms. If the lock is still held, the writer drops its update; the
+  next prompt writes again. Inside the lock, the write goes to a temp file in the same directory and is
+  renamed into place, so readers, which take no lock, never see a partial file.
+- The session cache has a single writer: Claude Code runs a session's hooks one prompt at a time.
 - A transcript that contains `skill_listing` entries but yields zero skills gives `error:roster`.
 
 ## Scrub
@@ -141,10 +150,23 @@ The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one
 
 ## Deadline
 
-- The watchdog thread starts first and sleeps until `start + deadline_ms` on a monotonic clock. It then exits
-  the process with code 0.
-- The main thread writes its output in one `write` call, and only after it has set a flag that the watchdog
-  checks. So the output is either complete or absent.
+- The watchdog thread starts first and sleeps until `start + deadline_ms` on a monotonic clock.
+- One atomic state value, `pending`, `writing` or `expired`, decides who owns the output:
+  - The main thread moves `pending` to `writing` with a compare-and-swap, writes, then exits 0.
+  - At the deadline the watchdog tries `pending` to `expired`. If that succeeds, it exits 0 at once, and the
+    main thread can no longer start a write.
+  - If the state is already `writing`, the watchdog waits a 50 ms grace period and then exits 0 whether the
+    write has finished or not.
+- A stalled write therefore cannot extend the process past `deadline + 50 ms`. It also cannot produce a
+  partial hint, for three reasons:
+  - The output is capped at 512 bytes, which is `PIPE_BUF` on macOS. The hint JSON is about 200 bytes, and the
+    skill name is capped to keep it under the limit.
+  - It goes out in a single `write(2)` call. POSIX makes a pipe write of at most `PIPE_BUF` bytes atomic, so a
+    blocked write transfers nothing.
+  - `SIGPIPE` is ignored, so a closed reader gives an error instead of killing the process mid-write.
+- Failure test for the stall: the harness creates a pipe, fills it until a non-blocking write fails, passes
+  the full pipe as the child's stdout, and never reads. The child must exit 0 within 750 ms of launch, and
+  the pipe must hold no bytes from the child.
 - The HTTP client gets the remaining budget as its total timeout.
 - Keychain access uses the no-dialog flag, so it cannot block on a prompt. A slow Keychain read is still
   bounded by the watchdog.
@@ -204,7 +226,8 @@ No prompt text and no hash of it.
   "diagnose"], ...]}`. A pick counts as right if it is in `expected`, or if it is a canonical skill whose
   substitution for an expected skill is on the list.
 - M0a maps expected names that do not exist in `~/Code` to the names that do, and Max approves each
-  substitution. The `grilling` to `brainstorming` substitution starts unapproved.
+  substitution. The `grilling` and `grill-me` to `brainstorming` substitutions are not approved: they are
+  different workflows, and labels keep them apart.
 
 ### Parity (G2a)
 
@@ -245,11 +268,31 @@ built requests are compared field by field with the probe's.
     skip and the project listing fallback. One warm-up session seeds the project listing.
 - Run: `claude -p --output-format stream-json --max-turns 3`, tools limited to `Skill`, `Read`, `Glob`,
   `Grep`. Two-turn cases use `--resume` for the second prompt, so the second prompt runs with its session's
-  own listing.
-- 115 cases x 3 arms x 3 runs = 1,035 runs. A case counts for the result it gives in at least 2 of its 3 runs.
+  own listing. Only the second prompt is scored.
+- Controls:
+  - The Claude model is passed as an explicit versioned id, and the settings files are frozen and hashed into
+    the results.
+  - Every trial starts a fresh session, and the worktree is reset between trials.
+  - Arms are interleaved case by case (A, B, C, then the next case, rotating the start arm), so drift in
+    time or service load spreads across the arms.
+- Harness validation first: 6 cases (2 skill, 2 no-skill, 2 two-turn) x 3 arms x 1 run. Check that every
+  `Skill` call is parsed, the hook arms fire, and a reset leaves the worktree clean. Only then start the full
+  run.
+- Volume:
+  - Scored case trials: 115 cases x 3 arms x 3 runs = 1,035.
+  - Setup prompts for the two-turn cases: 10 x 3 x 3 = 90 more `claude -p` calls.
+  - Completion runs: 10 prompts x 2 arms = 20.
+  - Harness validation: 18.
+  - Total: about 1,160 `claude -p` calls.
+- Aggregation, as in PRD G1:
+  - Every run-level result is kept in `eval/runs/`.
+  - A case is correct when at least 2 of its 3 runs are correct.
+  - A case's unwanted-load count is the median of its 3 runs.
+  - Arm totals are sums over cases.
 - From the stream: every `Skill` tool call, its result, and the time to the first assistant output.
 - Completion: 10 skill prompts run to the end in a throwaway worktree with write tools on, arms A and C. A
-  blind Claude judge scores each pair against the prompt's rubric: better, same or worse.
+  blind Claude judge scores each pair against the prompt's rubric: better, same or worse. Max reviews every
+  "worse" judgement before G1e is decided.
 
 ## Testing
 
@@ -267,5 +310,8 @@ built requests are compared field by field with the probe's.
 ## Known limits
 
 - A skill removed mid-session stays in the roster until a new `isInitial: true` entry arrives.
-- The project listing can lag behind a skill added in another session.
+- The project listing can lag behind a skill added in another session. The 7-day age limit bounds staleness
+  but does not prove that a stored skill exists in the new session (for example a project-level skill that
+  exists on one worktree's branch only).
+- A dropped project-cache write (lock busy for 20 ms) leaves the older listing in place until the next prompt.
 - Free text (addresses, case or medical details) is not scrubbed; the allowlist is the control.

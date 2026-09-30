@@ -72,9 +72,13 @@ jevroute ships only if all goals hold. Each is measured at the milestone named, 
 
 ### G1 - Hints improve Claude's skill use (M0)
 
-Measured on the 105 development prompts plus 10 short two-turn cases, in three arms: no hook, a generic
-reminder hook ("check whether a listed skill fits"), and the Jev hint hook. Each prompt runs 3 times per arm
-and counts for the result it gives in at least 2 of 3 runs.
+Measured on the 105 development prompts plus 10 short two-turn cases (5 whose second prompt needs a skill, 5
+whose second prompt needs none), in three arms: no hook, a generic reminder hook ("check whether a listed
+skill fits"), and the Jev hint hook. A two-turn case is scored on its second prompt only. That gives 75
+skill cases and 40 no-skill cases. Each case runs 3 times per arm, and every run-level result is kept.
+
+- **Aggregation:** a case counts as correct skill use when at least 2 of its 3 runs are correct. A case's
+  unwanted-load count is the median of its 3 runs. Arm totals are sums over cases.
 
 - **Correct skill use:** within the run, Claude calls the Skill tool with a skill from the prompt's expected
   list and the call succeeds, or that skill is already loaded earlier in the same session. A prerequisite
@@ -84,11 +88,13 @@ and counts for the result it gives in at least 2 of 3 runs.
 
 | # | Metric | Target |
 |---|---|---|
-| G1a | correct skill use on the 70 skill prompts, Jev arm vs no hook | +10 percentage points or more |
-| G1b | correct skill use, Jev arm vs reminder arm | +5 percentage points or more |
-| G1c | unwanted loads on the 35 no-skill prompts, Jev arm vs no hook | at most 1 more |
-| G1d | unwanted loads on all prompts, Jev arm vs reminder arm | not higher |
-| G1e | task quality on 10 prompts run to completion, judged blind, Jev arm vs no hook | Jev arm judged worse on at most 1 of 10 |
+| G1a | correct skill use on the 75 skill cases, Jev arm vs no hook | +10 percentage points or more |
+| G1b | correct skill use on the 75 skill cases, Jev arm vs reminder arm | +5 percentage points or more |
+| G1c | unwanted loads on the 40 no-skill cases, Jev arm vs no hook | at most 1 more |
+| G1d | unwanted loads on all 115 cases, Jev arm vs reminder arm | not higher |
+| G1e | task quality on 10 prompts run to completion, judged blind, Jev arm vs no hook | Jev arm judged worse on at most 1 of 10, and Max reviews every "worse" judgement |
+
+G1e is a smoke test: ten prompts can catch a clear regression but cannot show that quality holds in general.
 
 If G1a holds but G1b does not, the reminder is the better product and the project stops.
 
@@ -117,7 +123,7 @@ Latency is measured from outside the process, from launch to process exit, inclu
 | # | Metric | Target |
 |---|---|---|
 | G4a | calls that reach Jev | p50 <= 400 ms, p95 <= 600 ms |
-| G4b | any call, including failures | never over 750 ms |
+| G4b | every run in the M2 acceptance and failure tests, including failures | at most 750 ms (700 ms deadline + 50 ms exit grace) |
 | G4c | skip paths (scope, prompt, short reply, roster) | p95 <= 20 ms |
 | G4d | timeouts and errors, reported separately | together under 2% of prompts |
 
@@ -146,8 +152,8 @@ The design document holds the detail behind each requirement: paths, formats and
 | F4 | It scrubs the prompt before sending: private keys, known key prefixes, JWTs, `password:`/`token:` values of any length, IBANs with or without spaces, emails, NL phone numbers, 9-digit numbers, long hex and base64 blobs, home paths. | Table test passes, including `password: abc123!` and a spaced IBAN, which the probe's scrubber missed. |
 | F4a | The same scrub runs on the complete outbound payload, including skill names and descriptions. | A test skill whose description holds an email and a key prefix is sent masked. |
 | F5 | It builds the skill list from the session transcript's `skill_listing` entries, read from a stored offset. An entry with `isInitial: true` replaces the list; any other entry adds or updates skills by name. A name missing from a later entry is never treated as removed. | Tests: full listing, delta, repeated name, partial last line, offset resume, truncated or replaced transcript. |
-| F5a | When the session has no listing yet, it uses the last listing stored for the project, keyed by the git common directory (so worktrees share it), or by the resolved cwd outside a repo. A stored listing older than 7 days is ignored. With no usable listing, it skips. | A new worktree of a known repo gets a hint on its first prompt; an unknown project gives `skip:roster`. |
-| F5b | A parallel session replaces the stored project listing only with a listing that has a newer transcript timestamp. Every cache write goes to a temp file and is renamed into place. | 8 parallel writers leave the newest listing, never a partial file. |
+| F5a | When the session has no listing yet, it uses the last listing stored for the project, keyed by the git common directory (so worktrees share it), or by the resolved cwd outside a repo. A stored listing older than 7 days is ignored. With no usable listing, it skips. The age limit bounds staleness; it does not prove that every stored skill exists in the new session. | A new worktree of a known repo gets a hint on its first prompt; an unknown project gives `skip:roster`. |
+| F5b | A parallel session replaces the stored project listing only with a listing that has a newer transcript timestamp. The read, compare and replace run under a lock on the project entry, with a bounded wait; if the lock is not free within 20 ms, the write is dropped. The write goes to a temp file and is renamed into place. | 8 parallel writers with different timestamps leave the newest listing, never a partial file, and none waits over 20 ms. |
 | F5c | A transcript that contains `skill_listing` entries but parses to zero skills gives `error:roster`, not `skip:roster`. | Fixture with a changed entry shape gives `error:roster`. |
 | F6 | It sends one Jev `choice` request: the scrubbed prompt, every eligible skill (name + listing description), and a "no skill" option with fixed wording, using the model named in the config. | The built request equals the frozen probe request for the same prompt and listing. |
 | F7 | It applies the config: excluded skills (glob patterns allowed) are removed before the request; near-duplicate skills stay separate in the request and their probabilities are summed into the group's canonical skill after the answer. A group whose canonical skill is missing from the listing is ignored for that prompt. | Tests: glob exclusion, exclusion before groups, group sum, missing canonical. |
@@ -161,7 +167,7 @@ The design document holds the detail behind each requirement: paths, formats and
 
 | ID | Requirement |
 |---|---|
-| N1 | Hard deadline of 700 ms from process start, on a monotonic clock. A watchdog thread started first exits the process with code 0 and no output when the deadline passes, whatever the main thread is doing. The HTTP call gets the remaining budget. The hook's `timeout` in settings is set to 2 s as a backstop. |
+| N1 | Hard deadline of 700 ms from process start, on a monotonic clock. A watchdog thread started first exits the process with code 0 and no output when the deadline passes, whatever the main thread is doing. If the output write has already started, the watchdog allows it 50 ms and then exits anyway. The output is at most 512 bytes and is written with one `write` call, which is atomic on a pipe, so Claude Code sees the whole hint or nothing. The HTTP call gets the remaining budget. The hook's `timeout` in settings is set to 2 s as a backstop. |
 | N2 | Fail-open: a missing key, locked Keychain, network error, bad answer or bad cache file never blocks or changes the prompt. |
 | N3 | Bounded work: stdin is capped at 1 MB, new transcript bytes per call at 8 MB, and the Jev response at 1 MB. Over a cap, the hook skips with the matching error outcome. |
 | N4 | Config is validated at load: a skill in two groups, an excluded group target, or a threshold outside (0, 1] is an error, and the hook then skips with an `error:config` outcome. `doctor` warns when `model` is an alias. |
@@ -209,7 +215,7 @@ The design document holds the detail behind each requirement: paths, formats and
 
 A group sums probability; it does not prove that the canonical skill suits every member's prompts. The
 `brainstorming` group joins two different workflows (grilling questions an existing idea, brainstorming
-designs a new one), so evaluation does not accept that substitution unless Max approves it. In `~/Code`
+designs a new one), so that substitution is not approved and the labels keep the two apart. In `~/Code`
 today only the `diagnose`, `requesting-code-review` and `skill-creator` groups have members present.
 
 ## 10. Milestones
@@ -217,9 +223,9 @@ today only the `diagnose`, `requesting-code-review` and `skill-creator` groups h
 | | Scope | Exit |
 |---|---|---|
 | M0a | Groundwork: record whether the transcript holds a `skill_listing` when the hook fires on the first and second prompt, on the installed Claude Code version; copy the eval data and the probe listing into this repo after a secret scan; map expected skills to names that exist in `~/Code`; list the approved group substitutions; make scoring independent of the config | Findings recorded; eval data and fixtures in the repo |
-| M0b | Behaviour test: three arms through `claude -p` in a scratch `~/Code` project, as in G1 | G1 met, or the project stops. No product code before this exit |
+| M0b | Behaviour test: validate the harness on a small sample, then run three arms through `claude -p` in a scratch `~/Code` project, as in G1, with the Claude model and settings frozen, a fresh session and reset worktree per trial, and arms interleaved | G1 met, or the project stops. No product code before this exit |
 | M1 | Rust binary with F1-F12 and unit tests per module; record Jev responses once with the pinned model | `jevroute eval --responses` meets G2a |
-| M2 | Live replay, fresh acceptance set, external latency, failure tests (cold cache, locked Keychain, binary not yet granted Keychain access, no network, 8 parallel calls, oversized input, 50 ms deadline) | G2b, G3, G4a-c met |
+| M2 | Live replay, fresh acceptance set, external latency, failure tests (cold cache, locked Keychain, binary not yet granted Keychain access, no network, 8 parallel calls, oversized input, 50 ms deadline, stalled output pipe) | G2b, G3, G4a-c met |
 | M3 | Installed as a user-level hook for one week | Keep if G4d holds, `error:roster` never occurs, and at most 1 of the judged hinted turns steered Claude wrong. Otherwise remove |
 
 Rollback at any point: remove the hook entry from `~/.claude/settings.json`, or set `JEVROUTE=off`.
