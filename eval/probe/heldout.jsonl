@@ -1,0 +1,50 @@
+{"id": "q01", "kind": "none", "prompt": "run the tests", "expected": []}
+{"id": "q02", "kind": "skill", "prompt": "grafana says p99 on the ingest service spiked around 14:00, pull request rate and latency for the last 3h", "expected": ["grafana-metrics"]}
+{"id": "q03", "kind": "none-lookalike", "prompt": "git: how do I undo the last commit but keep the changes staged", "expected": []}
+{"id": "q04", "kind": "skill", "prompt": "~/Downloads/invoice-urgent.eml can you tell me if this is legit", "expected": ["email-forensics", "phishing-investigate"]}
+{"id": "q05", "kind": "none", "prompt": "why did that fail", "expected": []}
+{"id": "q06", "kind": "hard", "prompt": "cache_read_input_tokens is 0 on every call since we added the new tool block, why", "expected": ["audit-prompt-caching"]}
+{"id": "q07", "kind": "none", "prompt": "ok now do the same for the staging config", "expected": []}
+{"id": "q08", "kind": "skill", "prompt": "acme-billing-support.example keeps sending fake invoices to our staff, find who hosts it and draft the abuse reports", "expected": ["phishing-investigate"]}
+{"id": "q09", "kind": "none-lookalike", "prompt": "what's the difference between a KV namespace and a D1 database, one line", "expected": []}
+{"id": "q10", "kind": "skill", "prompt": "file this in linear: users get a 500 on /export when the CSV has more than 10k rows, seen in prod today", "expected": ["triage", "linear"]}
+{"id": "q11", "kind": "none", "prompt": "shorter please", "expected": []}
+{"id": "q12", "kind": "skill", "prompt": "add turnstile to the signup form in web/signup.tsx", "expected": ["turnstile-spin"]}
+{"id": "q13", "kind": "none", "prompt": "add a --verbose flag to cmd/scan/main.go", "expected": []}
+{"id": "q14", "kind": "hard", "prompt": "the tests pass locally but the deploy job flakes about 1 in 5 runs, no idea why", "expected": ["diagnose", "superpowers:systematic-debugging", "mattpocock-skills:diagnosing-bugs"]}
+{"id": "q15", "kind": "none-lookalike", "prompt": "fix the typo in the email draft above, 'recieve' should be 'receive'", "expected": []}
+{"id": "q16", "kind": "skill", "prompt": "deploy this worker to staging and set the API_KEY secret", "expected": ["wrangler"]}
+{"id": "q17", "kind": "none", "prompt": "ok thanks", "expected": []}
+{"id": "q18", "kind": "skill", "prompt": "write an ADR for choosing Postgres over DynamoDB for the audit store", "expected": ["adr"]}
+{"id": "q19", "kind": "none-lookalike", "prompt": "does loki support regex label matchers like {app=~\"api.*\"}", "expected": []}
+{"id": "q20", "kind": "skill", "prompt": "https://youtu.be/dQw4w9WgXcQ pull out what he says about rate limiting and give me quotes", "expected": ["youtube"]}
+{"id": "q21", "kind": "none", "prompt": "rename tmp to parsed in internal/parse/lex.go", "expected": []}
+{"id": "q22", "kind": "hard", "prompt": "sketch an ER diagram of the orders schema, save it as an html file", "expected": ["diagram-design"]}
+{"id": "q23", "kind": "none-lookalike", "prompt": "what does SPF softfail mean, ~all vs -all", "expected": []}
+{"id": "q24", "kind": "skill", "prompt": "draw the request flow between the gateway, auth service and job queue as a diagram", "expected": ["archify"]}
+{"id": "q25", "kind": "none", "prompt": "yes go ahead", "expected": []}
+{"id": "q26", "kind": "skill", "prompt": "handoff please, I'm nearly out of context", "expected": ["handoff"]}
+{"id": "q27", "kind": "none-lookalike", "prompt": "what port does wrangler dev listen on by default", "expected": []}
+{"id": "q28", "kind": "hard", "prompt": "we're moving off Zscaler to Cloudflare, map our ZIA URL filtering rules to the new policies", "expected": ["cloudflare-one-migrations"]}
+{"id": "q29", "kind": "none", "prompt": "cargo clippy complains about needless_borrow in src/net.rs, fix it", "expected": []}
+{"id": "q30", "kind": "skill", "prompt": "merge the three scans in ~/Downloads/scans/ into one pdf, 1.pdf 2.pdf 3.pdf", "expected": ["anthropic-skills:pdf"]}
+{"id": "q31", "kind": "none-lookalike", "prompt": "reword the last commit message to 'fix lexer panic on empty input'", "expected": []}
+{"id": "q32", "kind": "skill", "prompt": "docs/prd-alerts.md is the PRD for the alert routing revamp, split it into issues we can pick up separately", "expected": ["to-tasks"]}
+{"id": "q33", "kind": "none", "prompt": "what does this regex do: ^\\d{4}\\s?[A-Z]{2}$", "expected": []}
+{"id": "q34", "kind": "hard", "prompt": "how do I port our sandbox app to the 1.0 preview", "expected": ["sandbox-migrate-to-next"]}
+{"id": "q35", "kind": "none-lookalike", "prompt": "what is a Durable Object, one sentence", "expected": []}
+{"id": "q36", "kind": "skill", "prompt": "which grafana alert rules are firing right now", "expected": ["grafana-alerts"]}
+{"id": "q37", "kind": "none", "prompt": "no, the other one", "expected": []}
+{"id": "q38", "kind": "skill", "prompt": "before we cut over on Monday, is billing-api actually ready for prod? go through it properly", "expected": ["prod-readiness"]}
+{"id": "q39", "kind": "none", "prompt": "show me the diff", "expected": []}
+{"id": "q40", "kind": "skill", "prompt": "search loki for 'connection reset' in the edge-proxy namespace over the last hour", "expected": ["grafana-logs"]}
+{"id": "q41", "kind": "none", "prompt": "what's the go idiom for a set", "expected": []}
+{"id": "q42", "kind": "skill", "prompt": "get a few agents to argue whether the runbooks stay in Confluence or move to a repo, verdict in a file", "expected": ["debate"]}
+{"id": "q43", "kind": "none", "prompt": "translate to English: 'Wij hebben uw betaling niet ontvangen'", "expected": []}
+{"id": "q44", "kind": "skill", "prompt": "turn ~/tmp/hosts.tsv into a spreadsheet with a column counting hits per host", "expected": ["anthropic-skills:xlsx"]}
+{"id": "q45", "kind": "none", "prompt": "make the error message in server.go lowercase", "expected": []}
+{"id": "q46", "kind": "hard", "prompt": "rewrite this Slack update so a non-native reader gets it in one pass: 'so basically the migration kinda finished but we had some hiccups w/ the replicas, gonna circle back once things settle'", "expected": ["ste-writing", "comms:draft"]}
+{"id": "q47", "kind": "none", "prompt": "tail the build log and tell me the last error", "expected": []}
+{"id": "q48", "kind": "skill", "prompt": "make a Durable Object that keeps per-tenant rate limit counters and resets them with an alarm", "expected": ["durable-objects"]}
+{"id": "q49", "kind": "skill", "prompt": "commit what I have", "expected": ["git:commit-message"]}
+{"id": "q50", "kind": "none", "prompt": "explain what parseHeader does in internal/mail/parse.go", "expected": []}
