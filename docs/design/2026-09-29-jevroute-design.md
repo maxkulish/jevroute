@@ -20,8 +20,8 @@ prompt typed in a session under ~/Code/**
        5. prompt    slash command or empty -> skip:prompt; short reply -> skip:short_reply
        6. roster    this session's listing, else the project's stored listing   else skip:roster
        7. key       Keychain read, dialog disabled                          else error:key
-       8. scrub     mask the prompt and every skill name and description
-       9. policy    drop excluded skills, build one `choice` request with a `none` option
+       8. scrub     mask the prompt and every skill name and description; keep the first 4,000 characters
+       9. policy    drop excluded skills, build one `choice` request with a `none` option; over 28k est. tokens -> error:request
       10. jev       POST /v1/systemone within the remaining deadline        else error:http / timeout
       11. decide    sum group members into their canonical skill; top != none and >= 0.9 -> hint
       12. output    hint as additionalContext; one line to the outcome log (best effort)
@@ -46,11 +46,12 @@ One binary crate, one module per unit. Each unit is tested on its own.
 | `scrub` | Masks secrets and identifiers in any string | F4, F4a |
 | `roster` | Parses `skill_listing` entries from a transcript from an offset; merges; keeps the session and project caches | F5, F5a, F5b, F5c |
 | `policy` | Loads and validates config; builds the request; decides | F6, F7, F8, N4 |
-| `jev` | Blocking HTTP client (rustls) with a deadline and a response size cap | F6, N1, N3 |
-| `secret` | Keychain read with the dialog disabled; the `key` command's write and access grant | F10 |
+| `provider` | Resolves the selected provider (flag, env, config, default) to a URL, model id and Keychain item; the `provider` command's checks, menu and save | F13 |
+| `jev` | Blocking HTTP client (rustls) with a deadline and a response size cap, against the resolved provider URL | F6, N1, N3 |
+| `secret` | Keychain read with the dialog disabled, one item per provider; the `key` command's write and access grant | F10 |
 | `outlog` | Appends one JSON line per call; failures are ignored | F9 |
 | `eval` | Runs a labelled set through the same code path; scores; replays recorded responses | F11 |
-| `doctor` | Runs the checks and prints the roster the next prompt would use | F12 |
+| `doctor` | Runs the checks, names the provider in use and prints the roster the next prompt would use | F12 |
 
 Crates are chosen at M1. Candidates: `serde_json`, `ureq` (blocking, rustls), `security-framework`,
 `regex`, `globset`, `sha2`.
@@ -150,7 +151,8 @@ limits.
 ## Policy and request
 
 The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one option per eligible skill
-(name and description), and a final `none` option with the fixed wording. The model comes from the config.
+(name and description), and a final `none` option with the fixed wording. The model id and the URL come from
+the selected provider; the body is otherwise identical for every provider.
 
 - `exclude` accepts exact names and `*` globs and runs before the request.
 - Group members stay separate options. After the answer, each member's probability is added to its
@@ -158,6 +160,13 @@ The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one
 - A group whose canonical skill is not in the roster is ignored for that prompt; its members rank alone.
 - Hint only if the top entry is a skill with a summed probability >= `threshold`. The hint names the
   canonical skill.
+- The prompt in the request is the first 4,000 characters of the scrubbed prompt, cut at a character
+  boundary, with no marker (F6a). The cut is a size and privacy bound. Measured on 2 Oct: 4,300 characters of
+  neutral log lines added to each of the 105 prompts cost 2 hints (paste after the prompt) or 3 (paste
+  before) and produced no wrong hint, so the head of the prompt is enough and the order barely matters.
+- The request size is estimated as serialized bytes divided by 4. Above 28,000 the hook gives
+  `error:request` without calling Jev (N3). Today's listing is 8.1k to 9.4k tokens, so the cap trips only
+  when the listing roughly triples.
 
 ## Deadline
 
@@ -195,10 +204,11 @@ The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one
 | Not allowlisted or opted out | no output | `skip:scope` |
 | Slash command or empty prompt | no output | `skip:prompt` |
 | Short reply | no output | `skip:short_reply` |
-| Invalid config | no output | `error:config` |
+| Invalid config, or a provider id (config or `JEVROUTE_PROVIDER`) with no entry | no output | `error:config` |
 | No usable listing (session or project) | no output | `skip:roster` |
 | Listing entries present but none parsed, or transcript read over the cap | no output | `error:roster` |
 | Keychain locked, key missing, or access not granted | no output | `error:key` |
+| Built request over the 28k-token estimate | no output | `error:request` |
 | Network error, non-2xx, or response over the cap | no output | `error:http` |
 | Deadline reached | no output | `timeout` |
 | Malformed answer | no output | `error:answer` |
@@ -214,15 +224,41 @@ The request follows `frozen-v1.json` exactly: the fixed `instructions` text, one
 {"ts": "...", "outcome": "hint", "ms": {"total": 312, "roster": 3, "key": 4, "http": 298},
  "top": [["diagnose", 0.96], ["none", 0.03], ["code-review", 0.01]], "pick": "diagnose",
  "roster_source": "session", "roster_id": "<sha256 of sorted names, 12 chars>",
- "model": "jev-1.13.0", "config": "<sha256 of config, 12 chars>"}
+ "provider": "typesafe", "model": "jev-1.13.0", "config": "<sha256 of config, 12 chars>"}
 ```
 
 No prompt text and no hash of it.
 
+## Providers
+
+Modelled on `gcm provider` and `gcm status`, cut down to one model behind several routes.
+
+- Config shape (PRD 9): `provider` selects an entry of `providers`; an entry has `url`, `model` and `key`
+  (a 1Password reference for `jevroute key`). Built-in defaults exist for `typesafe` and `openrouter`, so a
+  config without `providers` still works; a config entry overrides the built-in one field by field.
+- Resolution order: `--provider` (accepted by `eval` and `doctor` only), `JEVROUTE_PROVIDER`, config
+  `provider`, then `typesafe`. The resolved id, URL and model are fixed before the watchdog's first check and
+  logged with the outcome. An id with no entry is `error:config`, so the hook stays silent rather than
+  falling back to another route without being told.
+- `jevroute provider`: for each entry, read the Keychain item (dialog disabled), then one live `choice`
+  request with a two-option fixture state and the entry's model, timed; report `ready <ms>`, `missing key`
+  or `failing <reason>`. Show the menu with the current selection marked, save the pick with the same
+  atomic write the caches use, and print what `doctor` would print for it. `--set <id>` skips the menu and
+  the live check. `--json` prints the table for scripts.
+- Keychain items are named `jevroute/<provider id>`; `jevroute key` acts on the selected provider unless
+  `--provider` says otherwise.
+- Adding a provider later is one built-in entry plus a fixture response; nothing in `policy`, `scrub` or
+  `roster` changes. A keyless local provider (Ollama) would set `key` to null and skip the Keychain step; the
+  26-option and 8k-token limits measured on 1 Oct would need their own `error:request` rule, which is why it is
+  not in v1.
+- OpenRouter specifics: the global hostname only (`eu.`/`us.` need a paid plan), the workspace guardrail
+  must keep the global data region, and a 200 can carry an `error` object (seen on the router endpoint on
+  2 Oct), so the client treats a body without `answers` as `error:answer`.
+
 ## Keychain
 
-- `jevroute key` reads the key from 1Password with `op read`, stores it as a generic password item, and adds
-  the current binary to the item's access list.
+- `jevroute key` reads the selected provider's key from 1Password with `op read`, stores it as a generic
+  password item named `jevroute/<provider id>`, and adds the current binary to the item's access list.
 - The hook reads the item with the dialog disabled. A rebuilt binary has a new code signature and is not on
   the list, so the read fails with `error:key` until `jevroute key` runs again. `doctor` reports this.
 - M1 measures the read latency. If it is over 50 ms, that is recorded as a finding for M2.
@@ -253,10 +289,15 @@ built requests are compared field by field with the probe's.
 
 ### Live and fresh sets (G2b, G3)
 
-- G2b: live `jevroute eval` on the 105 prompts against the probe listing fixture.
-- G3: 60 prompts written by a separate agent from the listing of a `~/Code` session. At least two repos, short
-  follow-ups, lookalikes, and prompts that separate the members of each group. Labels and class balance are
-  committed before the first run.
+- G2b: live `jevroute eval` on the 105 prompts against the probe listing fixture. The target is a band (97 or
+  more right, 0 wrong, 0 needless) because two routes to the same model on the same day disagreed on 1 of 105
+  tops and moved scores by up to 0.09.
+- G3: 100 prompts written by a separate agent from the listing of a `~/Code` session. At least two repos, short
+  follow-ups, lookalikes, prompts that separate the members of each group, and at least 10 prompts with 1,000
+  or more characters of pasted logs, stack traces, code or terminal output, some with the request before the
+  paste and some after. Labels and class balance are committed before the first run.
+- A new Jev model id repeats both: refit the threshold on the 105 development prompts, then accept on a set
+  that was not used for the refit. The cut belongs to the model, not to the task.
 
 ## M0 procedure
 
@@ -291,8 +332,11 @@ built requests are compared field by field with the probe's.
   - Arms are interleaved case by case (A, B, C, then the next case, rotating the start arm), so drift in
     time or service load spreads across the arms.
 - Harness validation first: 6 cases (2 skill, 2 no-skill, 2 two-turn) x 3 arms x 1 run. Check that every
-  `Skill` call is parsed, the hook arms fire, and a reset leaves the worktree clean. Only then start the full
-  run.
+  `Skill` call is parsed, the hook arms fire, and a reset leaves the worktree clean.
+- Baseline pilot second: arm A alone, once per skill case (75 calls, the two-turn cases with their setup
+  prompt). If Claude already uses the right skill on 68 or more of the 75, G1a (+10 points) cannot be met
+  and the project stops here. The pilot run counts as the first of arm A's three runs in the full run, so
+  nothing is wasted when the pilot passes. Only then start the full run.
 - Volume:
   - Scored case trials: 115 cases x 3 arms x 3 runs = 1,035.
   - Setup prompts for the two-turn cases: 10 x 3 x 3 = 90 more `claude -p` calls.
@@ -313,9 +357,12 @@ built requests are compared field by field with the probe's.
 
 - Unit: `scrub` table; `roster` (full listing, delta, repeated name, name-only entry, partial last line,
   offset resume, replaced transcript, zero-parse `error:roster`); `policy` (config validation, glob exclusion,
-  exclusion before groups, group sum, missing canonical, threshold edges); `scope` (allowlist, symlinks,
+  exclusion before groups, group sum, missing canonical, threshold edges, prompt cap at 3,999, 4,000 and
+  4,001 characters with a multi-byte character at the boundary, request size cap); `provider` (resolution
+  order, unknown id, built-in defaults overridden field by field, Keychain item name per provider); `scope` (allowlist, symlinks,
   parent `.jevroute-off`, env); `prompt` (slash, empty, short-reply table); `hookio` round trip.
-- Replay: G2a and G2b as above.
+- Replay: G2a and G2b as above. G2b is run on the provider the trial will use; a provider switch after M2
+  repeats G2b on the new one.
 - Failure tests, each giving exit 0, no output and the right outcome class: cold cache, locked Keychain,
   binary not granted, network down (unroutable endpoint), 8 parallel calls on one session and one project,
   oversized stdin, deadline of 50 ms.
