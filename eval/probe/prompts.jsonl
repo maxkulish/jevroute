@@ -1,0 +1,55 @@
+{"id": "p01", "kind": "clear", "prompt": "My Go service panics with 'runtime error: invalid memory address or nil pointer dereference' in handler.go:42 after the last deploy. Why is this happening?", "expected": ["diagnose", "superpowers:systematic-debugging", "mattpocock-skills:diagnosing-bugs"]}
+{"id": "p02", "kind": "clear", "prompt": "Commit my staged changes with a proper message.", "expected": ["git:commit-message"]}
+{"id": "p03", "kind": "clear", "prompt": "Write the pull request description for this branch.", "expected": ["git:pr-message"]}
+{"id": "p04", "kind": "clear", "prompt": "Is this email phishing? ~/Downloads/invoice-overdue.eml", "expected": ["email-forensics", "phishing-investigate"]}
+{"id": "p05", "kind": "clear", "prompt": "The domain secure-login-verify-bank.com looks like a scam site. Investigate it and draft abuse reports to the registrar and host.", "expected": ["phishing-investigate"]}
+{"id": "p06", "kind": "clear", "prompt": "Summarize this talk for me: https://www.youtube.com/watch?v=aBcDeFgHiJk", "expected": ["youtube"]}
+{"id": "p07", "kind": "clear", "prompt": "What does this screenshot of the dashboard panel show? ~/Desktop/panel.png", "expected": ["image-analysis"]}
+{"id": "p08", "kind": "clear", "prompt": "Draw an ER diagram of our users, orders and payments tables as an HTML file.", "expected": ["diagram-design"]}
+{"id": "p09", "kind": "clear", "prompt": "Make an architecture diagram of the request path: API gateway, auth service, worker queue, Postgres.", "expected": ["archify"]}
+{"id": "p10", "kind": "clear", "prompt": "Turn this Slack ping into a Linear issue: 'export button returns 500 on CSVs over 10 MB'.", "expected": ["triage"]}
+{"id": "p11", "kind": "clear", "prompt": "Break the plan in docs/prd/0003-sync.md into Linear tickets that people can pick up independently.", "expected": ["to-tasks"]}
+{"id": "p12", "kind": "clear", "prompt": "Write a product requirements document for a household expenses tracker.", "expected": ["prd"]}
+{"id": "p13", "kind": "clear", "prompt": "Rewrite this incident summary in Simplified Technical English so non-native engineers get it in one read.", "expected": ["ste-writing"]}
+{"id": "p14", "kind": "clear", "prompt": "Edit my 800-word blog post draft so it does not read like AI wrote it.", "expected": ["humanize-writing"]}
+{"id": "p15", "kind": "clear", "prompt": "Write an email to our hosting vendor asking for the renewal quote and the new SLA terms.", "expected": ["email-writer"]}
+{"id": "p16", "kind": "clear", "prompt": "Extract the transaction tables from this PDF bank statement into CSV.", "expected": ["anthropic-skills:pdf"]}
+{"id": "p17", "kind": "clear", "prompt": "Build an Excel workbook with a monthly budget sheet and formulas for totals.", "expected": ["anthropic-skills:xlsx"]}
+{"id": "p18", "kind": "clear", "prompt": "Make a 6-slide PowerPoint deck on Q3 infrastructure costs.", "expected": ["anthropic-skills:pptx"]}
+{"id": "p19", "kind": "clear", "prompt": "Deploy this Worker with wrangler and add a KV namespace binding.", "expected": ["wrangler", "cloudflare", "workers-best-practices"]}
+{"id": "p20", "kind": "clear", "prompt": "Set up a Durable Object with SQLite storage for a chat room.", "expected": ["durable-objects"]}
+{"id": "p21", "kind": "clear", "prompt": "Show me the error logs from Loki for the checkout service in the last hour.", "expected": ["grafana-logs"]}
+{"id": "p22", "kind": "clear", "prompt": "Who is on call this week for the platform team?", "expected": ["grafana-irm"]}
+{"id": "p23", "kind": "clear", "prompt": "What is the p95 request latency for the API in Prometheus over the last day?", "expected": ["grafana-metrics"]}
+{"id": "p24", "kind": "clear", "prompt": "Update the Confluence page for the disaster recovery runbook with the new failover steps.", "expected": ["confluence"]}
+{"id": "p25", "kind": "clear", "prompt": "Write a handoff so a new session can continue this work tomorrow.", "expected": ["handoff"]}
+{"id": "p26", "kind": "clear", "prompt": "Is this service production-ready? Assess its operational maturity before we deploy.", "expected": ["prod-readiness"]}
+{"id": "p27", "kind": "clear", "prompt": "I got a job offer and want to negotiate the salary up. How should I approach it?", "expected": ["career-coach"]}
+{"id": "p28", "kind": "clear", "prompt": "Turn this EPUB on negotiation into a skill I can use to apply the author's frameworks.", "expected": ["knowledge-compiler"]}
+{"id": "p29", "kind": "clear", "prompt": "Why is cache_read_input_tokens always zero in my Claude API calls? The prompt prefix is identical every time.", "expected": ["audit-prompt-caching"]}
+{"id": "p30", "kind": "clear", "prompt": "Find academic papers on speculative decoding for LLM inference.", "expected": ["alphaxiv-research"]}
+{"id": "p31", "kind": "clear", "prompt": "I have an idea for a tool that tracks grocery prices across chains. Should I build it? Let's think it through.", "expected": ["superpowers:brainstorming"]}
+{"id": "p32", "kind": "clear", "prompt": "Implement the ISO week date parser test-first: write the failing test, then the code.", "expected": ["superpowers:test-driven-development", "mattpocock-skills:tdd"]}
+{"id": "p33", "kind": "clear", "prompt": "Review my current diff for correctness bugs before I merge.", "expected": ["code-review", "superpowers:requesting-code-review", "mattpocock-skills:code-review"]}
+{"id": "p34", "kind": "clear", "prompt": "Have a few agents argue Postgres versus SQLite for this app and give me a verdict.", "expected": ["debate"]}
+{"id": "p35", "kind": "clear", "prompt": "Analyze today's Little Snitch connections and flag anything unusual.", "expected": ["snitch"]}
+{"id": "p36", "kind": "clear", "prompt": "The selling agent invited me to bid on the house on Move.nl. Help me fill in the offer form.", "expected": ["property-bid"]}
+{"id": "p37", "kind": "clear", "prompt": "Resolve the merge conflicts in internal/server/main.go.", "expected": ["mattpocock-skills:resolving-merge-conflicts"]}
+{"id": "p38", "kind": "clear", "prompt": "Write an architecture decision record for choosing NATS over Kafka.", "expected": ["adr"]}
+{"id": "p39", "kind": "clear", "prompt": "Send transactional password-reset emails from my Cloudflare Worker and set up DKIM.", "expected": ["cloudflare-email-service"]}
+{"id": "p40", "kind": "clear", "prompt": "Plan the migration of our Zscaler ZPA app policies to Cloudflare Access.", "expected": ["cloudflare-one-migrations"]}
+{"id": "h01", "kind": "lookalike", "prompt": "Convert this Mermaid sequenceDiagram of the login flow into a polished diagram.", "expected": ["archify"]}
+{"id": "h02", "kind": "lookalike", "prompt": "Put these 8 initiatives on a 2x2 impact versus effort matrix.", "expected": ["diagram-design"]}
+{"id": "h03", "kind": "lookalike", "prompt": "Draft a Slack message to the team that the deploy moves to Thursday.", "expected": ["comms:draft", "ste-writing"]}
+{"id": "h04", "kind": "lookalike", "prompt": "Edit the existing quarterly-review.pptx: fix the title on slide 3 and add speaker notes.", "expected": ["anthropic-skills:pptx"]}
+{"id": "h05", "kind": "lookalike", "prompt": "The Stripe webhook test fails only on CI, never locally. Find out why.", "expected": ["diagnose", "superpowers:systematic-debugging", "mattpocock-skills:diagnosing-bugs"]}
+{"id": "n01", "kind": "none", "prompt": "Explain in two sentences what a monad is.", "expected": []}
+{"id": "n02", "kind": "none", "prompt": "What is the difference between TCP and UDP?", "expected": []}
+{"id": "n03", "kind": "none", "prompt": "Rename the variable x to count on line 12 of utils.py.", "expected": []}
+{"id": "n04", "kind": "none", "prompt": "What time zone is Mallorca in?", "expected": []}
+{"id": "n05", "kind": "none", "prompt": "Add a docstring to the parse_date function.", "expected": []}
+{"id": "n06", "kind": "none", "prompt": "How many days are there between 3 November and 31 December?", "expected": []}
+{"id": "n07", "kind": "none", "prompt": "Translate 'good morning, see you tomorrow' into Dutch.", "expected": []}
+{"id": "n08", "kind": "none", "prompt": "List the files in this folder.", "expected": []}
+{"id": "n09", "kind": "none", "prompt": "What does git rebase --onto do?", "expected": []}
+{"id": "n10", "kind": "none", "prompt": "Thanks, that worked!", "expected": []}

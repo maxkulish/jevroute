@@ -1,0 +1,23 @@
+{
+  "model": "jev-latest",
+  "threshold": 0.9,
+  "instructions": "Which of these skills, if any, is the right one to load to help with the user's latest request?",
+  "none": "No skill applies: a quick question or fact (even about a tool that has a skill), a small code edit, running a command, or a short reaction or follow-up to the previous reply.",
+  "exclude": [
+    "codex:codex-cli-runtime",
+    "codex:codex-result-handling",
+    "codex:gpt-5-4-prompting",
+    "superpowers:using-superpowers",
+    "home:templates:*"
+  ],
+  "groups": {
+    "diagnose": ["superpowers:systematic-debugging", "mattpocock-skills:diagnosing-bugs"],
+    "superpowers:brainstorming": ["mattpocock-skills:grilling", "mattpocock-skills:grill-me"],
+    "superpowers:requesting-code-review": ["code-review", "mattpocock-skills:code-review"],
+    "superpowers:test-driven-development": ["mattpocock-skills:tdd"],
+    "triage": ["mattpocock-skills:triage"],
+    "to-tasks": ["mattpocock-skills:to-tickets"],
+    "handoff": ["mattpocock-skills:handoff"],
+    "anthropic-skills:skill-creator": ["skill-creator:skill-creator"]
+  }
+}
