@@ -345,11 +345,15 @@ Rollback at any point: remove the hook entry from `~/.claude/settings.json`, or 
 
 ## 13. Open questions
 
-1. Whether the transcript already holds a `skill_listing` when the first prompt's hook fires. Transcripts
-   show the listing written in the same batch as the first prompt, so the answer is likely no. M0a confirms
-   it on the installed version.
+None open.
 
 Closed:
+
+- The transcript does not hold a `skill_listing` when the first prompt's hook fires; the file does not exist
+  yet, and the listing is written with the first user message 1-2 s after the hooks finish. From the second
+  prompt the listing is there. Measured on Claude Code 2.1.288 in `claude -p`, `--resume` and an interactive
+  session (`docs/findings/2026-10-03-first-prompt-listing.md`, CLO-835). A first-prompt hint therefore comes
+  only from the project fallback (F5a).
 
 - The prompt arrives in the `prompt` field. Plain stdout and `hookSpecificOutput.additionalContext` both add
   context; jevroute uses `additionalContext` (limit 10,000 characters, not shown as a chat message).

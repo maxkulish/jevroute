@@ -94,8 +94,10 @@ documented. Observed shape on 2026-09-29:
 - The first entry of a session has `isInitial: true` and the full listing (132 to 160 skills observed).
 - Later entries have `isInitial: false` and hold only the skills that were added or changed (1 to 8 observed).
   A name can appear in several of them.
-- The first entry is written in the same batch as the first user message, which appears to be after
-  `UserPromptSubmit` hooks run. M0a confirms this on the installed version.
+- The first entry is written in the same batch as the first user message, after `UserPromptSubmit` hooks
+  have run: on the first prompt the transcript file does not exist yet. Confirmed on Claude Code 2.1.288
+  (`docs/findings/2026-10-03-first-prompt-listing.md`). A session started from inside another Claude Code
+  session has transcript saving off and never offers a listing.
 - The listing already reflects precedence, `skillOverrides` (`name-only` entries have no description),
   plugins, bundled and nested skills. jevroute never resolves skills from disk.
 
