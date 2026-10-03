@@ -38,3 +38,37 @@ The numbers equal the probe's 53/55 and 46/50, so no saved pick relied on the wi
 are misses below the 0.9 threshold.
 
 trufflehog 3.97.9 filesystem scan of this folder on import: 0 verified, 0 unverified secrets.
+
+## Recorded jev-1.13.0 requests and responses (CLO-837)
+
+`record.py` rebuilds the probe request with `model: jev-1.13.0` instead of the moving `jev-latest` alias
+and saves the full request and full response per prompt in `recorded/<id>.json` (105 files, recorded
+3 Oct 2026, no header or key in them). `recorded/decisions.jsonl` holds the frozen decision on each
+recorded response next to the saved jev-latest pick. `record.py --check` asserts that the design's tightened
+scrub leaves every name and description of the listing unchanged; the probe's own scrub would have altered
+`audit-prompt-caching` and `claude-api`.
+
+```
+$ python3 eval/probe/record.py --score
+prompts (55): right 53, wrong 0, needless 0, missed 2, http p50 287 ms p90 344 ms
+    p19 missed pick=None top=wrangler score=0.51
+    p31 missed pick=None top=superpowers:brainstorming score=0.71
+  decisions that differ from the saved jev-latest run: 0
+heldout (50): right 45, wrong 0, needless 1, missed 4, http p50 289 ms p90 316 ms
+    q12 missed pick=None top=turnstile-spin score=0.43
+    q16 missed pick=None top=cloudflare score=0.55
+    q34 missed pick=None top=sandbox-migrate-to-next score=0.88
+    q44 missed pick=None top=anthropic-skills:xlsx score=0.79
+    q47 needless pick=grafana-logs top=grafana-logs score=0.91
+  decisions that differ from the saved jev-latest run: 2
+    q39 now pick=None top=superpowers:requesting-code-review 0.50 | saved pick=None top=none 0.48
+    q47 now pick=grafana-logs top=grafana-logs 0.91 | saved pick=None top=grafana-logs 0.87
+```
+
+One decision changed against the 29 Sep run. `q47` ("tail the build log and tell me the last error",
+expected no skill) scored `grafana-logs` at 0.87 on 29 Sep and 0.91 in this recording. Five more calls on
+3 Oct gave 0.90, 0.88, 0.89, 0.87, 0.87, so the prompt sits on the 0.9 threshold and the pinned model is not
+deterministic within about 0.02. The recorded response is kept as it came back. For the offline parity check
+(G2a) this is harmless, since the decision is computed from the recorded response. For the live replay
+(G2b, "0 needless") it means one boundary prompt can flip a run; the candidate skill is also a wrong one for
+a local build log. Noted on CLO-856.
