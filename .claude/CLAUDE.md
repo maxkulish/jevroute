@@ -44,3 +44,8 @@ Before any push to a public remote, a visibility change, or posting an excerpt (
    quotes one gets deleted, not edited.
 
 A hit stops the push. Fix the content, do not add the marker to an allowlist.
+
+Once per clone, `git config core.hooksPath .githooks` turns the gate on: `pre-commit` rejects a staged local-only
+file or a staged line with a marker, `pre-push` runs the full check. Linked worktrees share the setting and read
+the marker list from the main worktree, so a worktree needs no copy of it; `eval/probe/aliases.json` and
+`listing.jsonl` still have to be copied into a worktree before `record.py` runs there.
