@@ -66,8 +66,24 @@ def load(path):
     return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
 
 
+def aliases():
+    """Optional local aliases.json: [[regex, replacement], ...] applied to every skill name.
+
+    The committed data uses the aliased names; the file itself is not committed."""
+    path = HERE / "aliases.json"
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def alias(name, rules):
+    for pattern, repl in rules:
+        name = re.sub(pattern, repl, name)
+    return name
+
+
 def listing():
-    """Merged roster from listing.jsonl: isInitial replaces, later entries add or update by name."""
+    """Merged roster from listing.jsonl: isInitial replaces, later entries add or update by name.
+
+    Names pass through aliases() so the local roster matches the committed one."""
     skills = {}
     for e in load(HERE / "listing.jsonl"):
         a = e["attachment"]
@@ -81,7 +97,8 @@ def listing():
                 skills[cur] = (m.group(2) or "").strip()
             elif cur and line.strip():
                 skills[cur] = f"{skills[cur]} {line.strip()}".strip()
-    return skills
+    rules = aliases()
+    return {alias(n, rules): d for n, d in skills.items()}
 
 
 def config():

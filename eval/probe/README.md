@@ -45,7 +45,10 @@ trufflehog 3.97.9 filesystem scan of this folder on import: 0 verified, 0 unveri
 and saves, per prompt, the request's model and scrubbed prompt plus a SHA-256 of its `questions`, and the
 full response, in `recorded/<id>.json` (105 files, recorded 3 Oct 2026, no header or key in them). The
 `questions` object itself (every skill name and description) is not committed; `record.py --check` rebuilds
-it from the local `listing.jsonl` and asserts its hash equals the one in all 105 files. `recorded/decisions.jsonl` holds the frozen decision on each
+it from the local `listing.jsonl` and asserts its hash equals the one in all 105 files. Three skill names in the
+local roster are personal; `record.py` renames them through a local `aliases.json` (not committed, a list of
+`[regex, replacement]` pairs) before it builds the request, so every committed file, including the saved runs
+and the recorded responses, carries the alias and the hash covers the aliased names. `recorded/decisions.jsonl` holds the frozen decision on each
 recorded response next to the saved jev-latest pick. `record.py --check` asserts that the design's tightened
 scrub leaves every name and description of the listing unchanged; the probe's own scrub would have altered
 `audit-prompt-caching` and `claude-api`.
