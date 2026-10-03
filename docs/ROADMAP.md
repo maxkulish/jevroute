@@ -2,6 +2,10 @@
 
 **Last Updated**: 2026-10-03
 
+**Project stopped on 3 Oct 2026** at the M0b baseline pilot: 69 of 75 right without a hook against a stop
+rule of 68 or more ([finding](./findings/2026-10-03-baseline-pilot-stop.md)). Every task below that is not
+Done was cancelled in Linear with that reason.
+
 Phases are the Linear milestones. Each is a gate: it passes when its reports show the goals met, not when
 its issues are closed ([PRD section 10](./prd/2026-09-29-jevroute-prd.md)).
 
@@ -29,7 +33,7 @@ Gate G1. Baseline pilot first: 68 or more of 75 right in the no-hook arm stops t
 |------|-------|--------|--------------|
 | CLO-840 | Build the throwaway Jev hook for the behaviour test's arm C | Backlog | CLO-835, CLO-836 |
 | CLO-841 | Validate the three-arm behaviour harness on 6 cases | Backlog | CLO-838, CLO-839, CLO-840 |
-| CLO-863 | Run the no-hook baseline pilot on the 75 skill cases and decide whether M0b continues | Backlog | CLO-841 |
+| CLO-863 | Run the no-hook baseline pilot on the 75 skill cases and decide whether M0b continues | Done, stop rule met | CLO-841 |
 | CLO-842 | Run the full behaviour test and report G1a-d with the stop rule | Backlog | CLO-841, CLO-863 |
 | CLO-843 | Run the 10 completion prompts, judge them blind, and review the worse cases | Backlog | CLO-841 |
 

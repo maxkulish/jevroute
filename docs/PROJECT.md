@@ -1,5 +1,7 @@
 # jevroute Dashboard
 
+**Stopped on 3 Oct 2026**: the M0b baseline pilot (CLO-863) met the stop rule, 69 of 75 right without a hook; see [the finding](./findings/2026-10-03-baseline-pilot-stop.md). Open tasks were cancelled in Linear.
+
 **Last Updated**: 2026-10-03
 
 ---
