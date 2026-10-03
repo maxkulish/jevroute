@@ -3,7 +3,9 @@
 # Markers live in .privacy-markers.txt at the repo root (not committed, one fixed string per line).
 set -u
 root=$(git rev-parse --show-toplevel) || exit 2
-markers="$root/.privacy-markers.txt"
+# Markers live next to the main worktree, so linked worktrees share one list.
+main=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+markers="${main:-$root}/.privacy-markers.txt"
 [ -s "$markers" ] || { echo "missing or empty $markers"; exit 2; }
 rc=0
 while IFS= read -r m; do
