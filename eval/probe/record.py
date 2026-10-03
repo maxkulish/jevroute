@@ -14,6 +14,7 @@ The API key is read with `op read` and kept in memory only.
 """
 import argparse
 import concurrent.futures as cf
+import hashlib
 import json
 import os
 import re
@@ -27,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 REC = HERE / "recorded"
 MODEL = "jev-1.13.0"
 URL = os.environ.get("JEV_URL", "https://api.typesafe.ai/v1/systemone")
-KEY_REF = os.environ.get("JEV_KEY_REF", "op://<vault>/<typesafe item>/<field>")
+KEY_REF = os.environ.get("JEV_KEY_REF", "")  # op://<vault>/<item>/<field>, or env:<VAR>
 SETS = {"prompts": "frozen-frozen-v1-prompts.jsonl", "heldout": "frozen-frozen-v1-heldout.jsonl"}
 
 # The probe's scrub (probe.py SCRUB), unchanged, so the recorded request equals the probe's.
@@ -104,6 +105,10 @@ def questions(cfg, eligible):
     return {"which": {"type": "choice", "instructions": cfg["instructions"], "criteria": crit}}
 
 
+def questions_sha256(q):
+    return hashlib.sha256(json.dumps(q, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def ranked_of(resp):
     a = (resp.get("answers") or {}).get("which")
     if not a:
@@ -130,6 +135,8 @@ def grade(pick, expected):
 
 
 def api_key():
+    if not KEY_REF:
+        raise SystemExit("set JEV_KEY_REF to op://<vault>/<item>/<field> or env:<VAR>")
     if KEY_REF.startswith("env:"):
         return os.environ[KEY_REF[4:]]
     return subprocess.check_output(["op", "read", KEY_REF], text=True).strip()
@@ -182,8 +189,12 @@ def cmd_record(workers):
         body = {"model": MODEL, "state": {"request": scrub(p["prompt"], SCRUB_PROBE), "recent_context": ""},
                 "questions": q}
         status, resp, ms = call(key, body)
+        # The committed request carries the model, the scrubbed prompt and a hash of the questions; the
+        # questions themselves (every skill name and description) stay out of the public repo and are
+        # rebuilt from listing.jsonl, which is not committed either.
+        kept = {"model": body["model"], "state": body["state"], "questions_sha256": questions_sha256(q)}
         rec = {"id": p["id"], "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-               "status": status, "ms": ms, "request": body, "response": resp}
+               "status": status, "ms": ms, "request": kept, "response": resp}
         if status == 200:
             tmp = REC / f"{p['id']}.json.tmp"
             tmp.write_text(json.dumps(rec, indent=1) + "\n")
@@ -245,6 +256,11 @@ def cmd_check():
     assert scrub(raw, SCRUB_TIGHT) == raw and not changed, f"tightened scrub changes the listing: {changed[:5]}"
     loose = [n for n, d in listed.items() if scrub(n, SCRUB_PROBE) != n or scrub(d, SCRUB_PROBE) != d]
     print(f"tightened scrub: listing of {len(listed)} skills unchanged; the probe's scrub would change {len(loose)}: {loose}")
+    cfg, _, eligible, _ = config()
+    h = questions_sha256(questions(cfg, eligible))
+    rec = {json.loads(f.read_text())["request"].get("questions_sha256") for f in REC.glob("*.json")}
+    assert rec == {h}, f"recorded questions hash {rec} != current listing {h}"
+    print(f"questions hash {h[:12]} matches all {len(list(REC.glob('*.json')))} recorded requests")
 
 
 if __name__ == "__main__":

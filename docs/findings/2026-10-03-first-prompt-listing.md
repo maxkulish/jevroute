@@ -42,7 +42,8 @@ the hook ran. Session `972c0ecc` shows the same order with 1.1 s between them.
 
 ## Fixture
 
-`eval/fixtures/code-transcript.jsonl` is session `81c79b46` reduced by `eval/fixtures/make-fixture.py`: every
+`eval/fixtures/code-transcript.jsonl` (not committed; rebuilt locally with `make-fixture.py`, the `~/Code` listing
+names the owner's work and home projects) is session `81c79b46` reduced by `eval/fixtures/make-fixture.py`: every
 line, type, uuid, timestamp, cwd and version is kept, the `skill_listing` attachment is kept in full, every
 other attachment and record is reduced to its type because the raw transcript carries the user's own
 instruction and memory files. trufflehog 3.97.9: 0 verified, 0 unverified.

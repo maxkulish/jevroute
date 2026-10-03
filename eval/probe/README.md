@@ -3,7 +3,7 @@
 Prompt sets, config, saved runs and the exact skill listing of the September 2026 probe, copied from
 `~/Work/investigations/typesafe/experiments/skill-suggestion/` on 2 October 2026. Labels use the names of
 that listing (an `~/Work/investigations` session), not `~/Code` names; the `~/Code` label set lives in
-`eval/code/` (CLO-838). Nothing in this folder is edited after import.
+`eval/code/` (CLO-838). Nothing in this folder is edited after import, except `heldout.jsonl` q04, where a home path became `~/` (the probe's scrub sent it that way).
 
 | File | Source | Content |
 |---|---|---|
@@ -12,7 +12,7 @@ that listing (an `~/Work/investigations` session), not `~/Code` names; the `~/Co
 | `frozen-v1.json` | `frozen-v1.json` | the frozen pipeline: `jev-latest`, threshold 0.9, exclusions, groups |
 | `runs/frozen-frozen-v1-prompts.jsonl` | `runs/` (gitignored there) | saved run of 29 Sep 2026: top 8 of the ranking, `pick`, `top`, `score` |
 | `runs/frozen-frozen-v1-heldout.jsonl` | `runs/` | same for the second set |
-| `listing.jsonl` | transcript `89cac098-a040-45d3-95e4-ca4e9e2abe78` | the two `skill_listing` attachments of the probe session (Claude Code 2.1.284): the `isInitial` entry of 150 skills and one delta adding `test-audit`. Session, path and uuid fields removed |
+| `listing.jsonl` (not committed) | transcript `89cac098-a040-45d3-95e4-ca4e9e2abe78` via `extract-listing.py` | the two `skill_listing` attachments of the probe session (Claude Code 2.1.284): the `isInitial` entry of 150 skills and one delta adding `test-audit`. Kept out of this public repo because skill names and descriptions describe the owner's work and home projects; rebuild it locally with `extract-listing.py` |
 
 Merged, the listing holds 151 skills; `frozen-v1.json` exclusions leave 138 eligible. The disk-built
 roster the probe rejected (`runs/listing.txt`) is not imported.
@@ -42,8 +42,10 @@ trufflehog 3.97.9 filesystem scan of this folder on import: 0 verified, 0 unveri
 ## Recorded jev-1.13.0 requests and responses (CLO-837)
 
 `record.py` rebuilds the probe request with `model: jev-1.13.0` instead of the moving `jev-latest` alias
-and saves the full request and full response per prompt in `recorded/<id>.json` (105 files, recorded
-3 Oct 2026, no header or key in them). `recorded/decisions.jsonl` holds the frozen decision on each
+and saves, per prompt, the request's model and scrubbed prompt plus a SHA-256 of its `questions`, and the
+full response, in `recorded/<id>.json` (105 files, recorded 3 Oct 2026, no header or key in them). The
+`questions` object itself (every skill name and description) is not committed; `record.py --check` rebuilds
+it from the local `listing.jsonl` and asserts its hash equals the one in all 105 files. `recorded/decisions.jsonl` holds the frozen decision on each
 recorded response next to the saved jev-latest pick. `record.py --check` asserts that the design's tightened
 scrub leaves every name and description of the listing unchanged; the probe's own scrub would have altered
 `audit-prompt-caching` and `claude-api`.
