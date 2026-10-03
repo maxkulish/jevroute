@@ -135,16 +135,33 @@ def api_key():
     return subprocess.check_output(["op", "read", KEY_REF], text=True).strip()
 
 
-def call(key, body):
+def call(key, body, attempts=4):
+    """POST once; retry connection errors, timeouts, 429 and 5xx with 1, 2, 4 s backoff."""
     req = urllib.request.Request(URL, data=json.dumps(body).encode(), method="POST",
                                  headers={"content-type": "application/json", "authorization": f"Bearer {key}"})
     t = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            status, out = r.status, json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        status, out = e.code, {"error": e.code, "body": e.read().decode(errors="replace")[:500]}
+    for i in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.status, json.loads(r.read()), int((time.time() - t) * 1000)
+        except urllib.error.HTTPError as e:
+            status, out = e.code, {"error": e.code, "body": e.read().decode(errors="replace")[:500]}
+            if status != 429 and status < 500:
+                return status, out, int((time.time() - t) * 1000)
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            status, out = 0, {"error": type(e).__name__, "body": str(e)[:500]}
+        if i + 1 < attempts:
+            time.sleep(2 ** i)
     return status, out, int((time.time() - t) * 1000)
+
+
+def recorded_ok(path):
+    """A fixture counts as recorded only if it parses and holds a 200 response."""
+    try:
+        rec = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return False
+    return rec.get("status") == 200 and "response" in rec and "request" in rec
 
 
 def cmd_record(workers):
@@ -154,7 +171,7 @@ def cmd_record(workers):
     todo = []
     for name in SETS:
         for p in load(HERE / f"{name}.jsonl"):
-            if not (REC / f"{p['id']}.json").exists():
+            if not recorded_ok(REC / f"{p['id']}.json"):
                 todo.append(p)
     print(f"eligible {len(eligible)}, to record {len(todo)}")
     if not todo:
@@ -168,12 +185,20 @@ def cmd_record(workers):
         rec = {"id": p["id"], "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                "status": status, "ms": ms, "request": body, "response": resp}
         if status == 200:
-            (REC / f"{p['id']}.json").write_text(json.dumps(rec, indent=1) + "\n")
+            tmp = REC / f"{p['id']}.json.tmp"
+            tmp.write_text(json.dumps(rec, indent=1) + "\n")
+            os.replace(tmp, REC / f"{p['id']}.json")
         return p["id"], status, ms
 
+    failed = []
     with cf.ThreadPoolExecutor(workers) as ex:
         for pid, status, ms in ex.map(one, todo):
             print(f"  {pid} {status} {ms} ms")
+            if status != 200:
+                failed.append(pid)
+    if failed:
+        raise SystemExit(f"{len(failed)} prompt(s) not recorded after retries: {' '.join(failed)}. "
+                         "Run again to record only those; nothing is scored until all 105 exist.")
 
 
 def cmd_score():
