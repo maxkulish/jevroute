@@ -2,6 +2,10 @@
 
 ## WHY
 
+**Stopped on 3 Oct 2026.** The M0b baseline pilot met the stop rule (69 of 75 right without a hook, CLO-863);
+no binary is built and the Linear project is closed. The repo stays as reference. Do not start M0a, M0b
+or M1 work from this plan without a new decision from the owner.
+
 jevroute is a small Rust CLI that runs as a Claude Code `UserPromptSubmit` hook. For each prompt in an
 allowed project it asks TypeSafe's Jev model which skill fits, and adds a one-line hint only when it is
 confident. Claude's own skill listing stays unchanged, so a missed hint costs nothing and a wrong hint is

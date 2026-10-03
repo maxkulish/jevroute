@@ -7,9 +7,12 @@ the one error the project is built to avoid.
 
 ## Status
 
-Documents and evaluation data only; the binary is not written yet. Work proceeds through gated
-milestones (groundwork, behaviour test, binary, acceptance, one-week trial). The current state is in
-[docs/PROJECT.md](docs/PROJECT.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
+**Stopped on 3 Oct 2026.** The behaviour test's baseline pilot showed Claude Code loading the right skill
+on 69 of 75 cases with no hint at all, which met the project's own stop rule (68 or more), so no binary
+was built. The reasoning and the numbers are in
+[docs/findings/2026-10-03-baseline-pilot-stop.md](docs/findings/2026-10-03-baseline-pilot-stop.md).
+The documents and evaluation data stay as reference; [docs/PROJECT.md](docs/PROJECT.md) and
+[docs/ROADMAP.md](docs/ROADMAP.md) show where the gated plan ended.
 
 ## Layout
 
